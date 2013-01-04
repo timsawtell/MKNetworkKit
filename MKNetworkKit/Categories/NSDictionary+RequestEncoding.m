@@ -3,7 +3,7 @@
 //  MKNetworkKitDemo
 //
 //  Created by Mugunth Kumar (@mugunthkumar) on 11/11/11.
-//  Copyright (C) 2011-2020 by Steinlogic
+//  Copyright (C) 2011-2020 by Steinlogic Consulting and Training Pte Ltd
 
 //  Permission is hereby granted, free of charge, to any person obtaining a copy
 //  of this software and associated documentation files (the "Software"), to deal
@@ -42,38 +42,33 @@
   if([string length] > 0)
     [string deleteCharactersInRange:NSMakeRange([string length] - 1, 1)];
   
-  return string;    
+  return string;
 }
 
 
 -(NSString*) jsonEncodedKeyValueString {
   
-  if(NSClassFromString(@"NSJSONSerialization")) {
-    NSError *error = nil;
-    NSData *data = [NSClassFromString(@"NSJSONSerialization") dataWithJSONObject:self
-                                                                         options:0 // non-pretty printing
-                                                                           error:&error];
-    if(error)
-      DLog(@"JSON Parsing Error: %@", error);
-    
-    return [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
-  } else {
-    DLog(@"JSON encoder missing, falling back to URL encoding");
-    return [self urlEncodedKeyValueString];
-  }
+  NSError *error = nil;
+  NSData *data = [NSJSONSerialization dataWithJSONObject:self
+                                                 options:0 // non-pretty printing
+                                                   error:&error];
+  if(error)
+    DLog(@"JSON Parsing Error: %@", error);
+  
+  return [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
 }
 
 
 -(NSString*) plistEncodedKeyValueString {
   
-  NSError *error = nil;    
-  NSData *data = [NSPropertyListSerialization dataWithPropertyList:self 
-                                                            format:NSPropertyListXMLFormat_v1_0 
+  NSError *error = nil;
+  NSData *data = [NSPropertyListSerialization dataWithPropertyList:self
+                                                            format:NSPropertyListXMLFormat_v1_0
                                                            options:0 error:&error];
   if(error)
     DLog(@"JSON Parsing Error: %@", error);
   
-  return [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];    
+  return [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
 }
 
 @end
