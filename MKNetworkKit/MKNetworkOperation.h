@@ -211,6 +211,27 @@ typedef enum {
 @property (nonatomic, readonly, strong) NSError *error;
 
 /*!
+ *  @abstract Boolean variable that states whether the operation's response should be cached despite coming from a secured source
+ *  @property shouldCacheEvenIfProtocolIsHTTPS
+ *
+ *  @discussion
+ *	If you set this property to YES, the operation's data will be cached even if the source is secure (HTTPS)
+ *  The default value is NO. MKNetworkKit will not cache responses from secure servers
+ */
+@property (nonatomic, assign) BOOL shouldCacheResponseEvenIfProtocolIsHTTPS;
+
+/*!
+ *  @abstract Boolean variable that states whether the operation's response should be cached
+ *  @property shouldNotCacheResponse
+ *
+ *  @discussion
+ *	If you set this property to YES, the operation's data will not be cached even if the engine's useCache is enabled
+ *  The default value is NO. MKNetworkKit will cache responses based on the engine setting.
+ *  This property should be used sparingly if your backend isn't written adhering to HTTP 1.1 caching standards
+ */
+@property (nonatomic, assign) BOOL shouldNotCacheResponse;
+
+/*!
  *  @abstract Boolean variable that states whether the operation should continue if the certificate is invalid.
  *  @property shouldContinueWithInvalidCertificate
  *
@@ -324,6 +345,16 @@ typedef enum {
 #endif
 
 /*!
+ *  @abstract Add additional POST/GET parameters to your request
+ *
+ *  @discussion
+ *	If you ever need to set additional params after creating your operation, you this method.
+ *  You normally set default parameters to the params parameter when you create a operation.
+ *  On specific cases where you need to add a new parameter for a call, you can use this
+ */
+-(void) addParams:(NSDictionary*) paramsDictionary;
+
+/*!
  *  @abstract Add additional header parameters
  *  
  *  @discussion
@@ -343,7 +374,7 @@ typedef enum {
  *  To use HTTP Basic Authentication, consider using the method setUsername:password:basicAuth: instead.
  *
  *  Example
- *  [op setToken:@"abracadabra" forAuthType:@"Token"] will set the header value to 
+ *  [op setAuthorizationHeaderValue:@"abracadabra" forAuthType:@"Token"] will set the header value to
  *  "Authorization: Token abracadabra"
  * 
  *  @seealso
@@ -564,10 +595,30 @@ typedef enum {
  *  @discussion
  *	This method is used for accessing the downloaded data as a NSDictionary or an NSArray. If the operation is still in progress, the method returns nil. If the response is not a valid JSON, this method returns nil. The difference between this and responseJSON is that, this method decodes JSON in the background.
  *
+ *  @see also
+ *  responseJSON
+ *  responseJSONWithOptions:completionHandler:
+ *
  *  @availability
  *  iOS 5 and above or Mac OS 10.7 and above
  */
 -(void) responseJSONWithCompletionHandler:(void (^)(id jsonObject)) jsonDecompressionHandler;
+
+/*!
+ *  @abstract Helper method to retrieve the contents as a NSDictionary or NSArray depending on the JSON contents in the background
+ *
+ *  @discussion
+ *	This method is used for accessing the downloaded data as a NSDictionary or an NSArray. If the operation is still in progress, the method returns nil. If the response is not a valid JSON, this method returns nil. The difference between this and responseJSON is that, this method decodes JSON in the background and allows passing JSON reading options like parsing JSON fragments.
+ *
+ *  @see also
+ *  responseJSON
+ *  responseJSONWithCompletionHandler:
+ *
+ *  @availability
+ *  iOS 5 and above or Mac OS 10.7 and above
+ */
+-(void) responseJSONWithOptions:(NSJSONReadingOptions) options completionHandler:(void (^)(id jsonObject)) jsonDecompressionHandler;
+
 /*!
  *  @abstract Overridable custom method where you can add your custom business logic error handling
  *  

@@ -25,6 +25,8 @@
 
 #import "MKNetworkKit.h"
 
+#import <ImageIO/ImageIO.h>
+
 #ifdef __OBJC_GC__
 #error MKNetworkKit does not support Objective-C Garbage Collection
 #endif
@@ -110,12 +112,14 @@ OSStatus extractIdentityAndTrust(CFDataRef inPKCS12Data,
 
 -(BOOL) isCacheable {
   
+  if(self.shouldNotCacheResponse) return NO;
   if(self.username != nil) return NO;
   if(self.password != nil) return NO;
   if(self.clientCertificate != nil) return NO;
   if(self.clientCertificatePassword != nil) return NO;
   if(![self.request.HTTPMethod isEqualToString:@"GET"]) return NO;
-  if([self.request.URL.scheme.lowercaseString isEqualToString:@"https"]) return NO;
+  if([self.request.URL.scheme.lowercaseString isEqualToString:@"https"]) return self.shouldCacheResponseEvenIfProtocolIsHTTPS;
+  if(self.downloadStreams.count > 0) return NO; // should not cache operations that have streams attached
   return YES;
 }
 
@@ -252,7 +256,10 @@ OSStatus extractIdentityAndTrust(CFDataRef inPKCS12Data,
 
 
 -(BOOL) isEqual:(id)object {
-  
+  if(object == self)
+    return YES;
+  if(!object || ![object isKindOfClass:[self class]])
+    return NO;
   if([self.request.HTTPMethod isEqualToString:@"GET"] || [self.request.HTTPMethod isEqualToString:@"HEAD"]) {
     
     MKNetworkOperation *anotherObject = (MKNetworkOperation*) object;
@@ -262,6 +269,9 @@ OSStatus extractIdentityAndTrust(CFDataRef inPKCS12Data,
   return NO;
 }
 
+-(NSUInteger) hash {
+  return [[self uniqueIdentifier] hash];
+}
 
 -(NSString*) uniqueIdentifier {
   
@@ -515,7 +525,6 @@ OSStatus extractIdentityAndTrust(CFDataRef inPKCS12Data,
 
 -(void) setUploadStream:(NSInputStream*) inputStream {
   
-#warning Method not tested yet.
   self.request.HTTPBodyStream = inputStream;
 }
 
@@ -562,9 +571,15 @@ OSStatus extractIdentityAndTrust(CFDataRef inPKCS12Data,
          [method isEqualToString:@"DELETE"]) && (params && [params count] > 0)) {
       
       finalURL = [NSURL URLWithString:[NSString stringWithFormat:@"%@?%@", aURLString,
-                                       [self encodedPostDataString]]];
+                                       [self.fieldsToBePosted urlEncodedKeyValueString]]];
     } else {
       finalURL = [NSURL URLWithString:aURLString];
+    }
+    
+    if(finalURL == nil) {
+      
+      DLog(@"Cannot create a URL with %@ and parameters %@ and method %@", aURLString, self.fieldsToBePosted, method);
+      return nil;
     }
     
     self.request = [NSMutableURLRequest requestWithURL:finalURL
@@ -587,6 +602,11 @@ OSStatus extractIdentityAndTrust(CFDataRef inPKCS12Data,
   }
   
   return self;
+}
+
+-(void) addParams:(NSDictionary*) paramsDictionary {
+  
+  [self.fieldsToBePosted addEntriesFromDictionary:paramsDictionary];
 }
 
 -(void) addHeaders:(NSDictionary*) headersDictionary {
@@ -626,11 +646,11 @@ OSStatus extractIdentityAndTrust(CFDataRef inPKCS12Data,
   if([self.filesToBePosted count] == 0 && [self.dataToBePosted count] == 0) {
     [[self.request allHTTPHeaderFields] enumerateKeysAndObjectsUsingBlock:^(id key, id val, BOOL *stop)
      {
-       [displayString appendFormat:@" -H \"%@: %@\"", key, val];
+       [displayString appendFormat:@" -H \'%@: %@\'", key, val];
      }];
   }
   
-  [displayString appendFormat:@" \"%@\"",  self.url];
+  [displayString appendFormat:@" \'%@\'",  self.url];
   
   if ([self.request.HTTPMethod isEqualToString:@"POST"] ||
       [self.request.HTTPMethod isEqualToString:@"PUT"] ||
@@ -640,17 +660,17 @@ OSStatus extractIdentityAndTrust(CFDataRef inPKCS12Data,
     if(self.postDataEncoding == MKNKPostDataEncodingTypeURL) {
       [self.fieldsToBePosted enumerateKeysAndObjectsUsingBlock:^(id key, id obj, BOOL *stop) {
         
-        [displayString appendFormat:@" %@ \"%@=%@\"", option, key, obj];
+        [displayString appendFormat:@" %@ \'%@=%@\'", option, key, obj];
       }];
     } else {
-      [displayString appendFormat:@" -d \"%@\"", [self encodedPostDataString]];
+      [displayString appendFormat:@" -d \'%@\'", [self encodedPostDataString]];
     }
     
     
     [self.filesToBePosted enumerateObjectsUsingBlock:^(id obj, NSUInteger idx, BOOL *stop) {
       
       NSDictionary *thisFile = (NSDictionary*) obj;
-      [displayString appendFormat:@" -F \"%@=@%@;type=%@\"", thisFile[@"name"],
+      [displayString appendFormat:@" -F \'%@=@%@;type=%@\'", thisFile[@"name"],
        thisFile[@"filepath"], thisFile[@"mimetype"]];
     }];
     
@@ -1241,6 +1261,7 @@ totalBytesExpectedToWrite:(NSInteger)totalBytesExpectedToWrite {
   if (self.response.statusCode >= 200 && self.response.statusCode < 300 && ![self isCancelled]) {
     
     self.cachedResponse = nil; // remove cached data
+
     [self notifyCache];
     [self operationSucceeded];
     
@@ -1305,58 +1326,14 @@ totalBytesExpectedToWrite:(NSInteger)totalBytesExpectedToWrite {
 
 -(void) decompressedResponseImageOfSize:(CGSize) size completionHandler:(void (^)(UIImage *decompressedImage)) imageDecompressionHandler {
   
-  static float scale = 1.0f;
-  static dispatch_once_t onceToken;
-  dispatch_once(&onceToken, ^{
-    scale = [[UIScreen mainScreen] scale];
-  });
-  
   dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_HIGH, 0), ^{
-    
-    __block CGSize targetSize = CGSizeMake(size.width * scale, size.height * scale);
-    UIImage *image = [self responseImage];
-    CGImageRef imageRef = image.CGImage;
-    CGColorSpaceRef colorSpace = CGColorSpaceCreateDeviceRGB();
-    CGImageAlphaInfo alphaInfo = CGImageGetAlphaInfo(imageRef);
-    BOOL sameSize = NO;
-    if (CGSizeEqualToSize(targetSize, CGSizeMake(CGImageGetWidth(imageRef), CGImageGetHeight(imageRef)))) {
-      targetSize = CGSizeMake(1, 1);
-      sameSize = YES;
-    }
-    
-    size_t imageWidth = (size_t)targetSize.width;
-    size_t imageHeight = (size_t)targetSize.height;
-    
-    CGContextRef context = CGBitmapContextCreate(NULL,
-                                                 imageWidth,
-                                                 imageHeight,
-                                                 8,
-                                                 // Just always return width * 4 will be enough
-                                                 imageWidth * 4,
-                                                 // System only supports RGB, set explicitly
-                                                 colorSpace,
-                                                 // Makes system don't need to do extra conversion when displayed.
-                                                 alphaInfo | kCGBitmapByteOrder32Little);
-    CGColorSpaceRelease(colorSpace);
-    if (!context) {
-      return;
-    }
-    
-    
-    CGRect rect = (CGRect){CGPointZero, {imageWidth, imageHeight}};
-    CGContextDrawImage(context, rect, imageRef);
-    if (sameSize) {
-      CGContextRelease(context);
-      dispatch_async(dispatch_get_main_queue(), ^{
-        imageDecompressionHandler(image);
-      });
-      return;
-    }
-    CGImageRef decompressedImageRef = CGBitmapContextCreateImage(context);
-    CGContextRelease(context);
-        
-    UIImage *decompressedImage = [[UIImage alloc] initWithCGImage:decompressedImageRef scale:scale orientation:image.imageOrientation];
-    CGImageRelease(decompressedImageRef);
+
+    CGImageSourceRef source = CGImageSourceCreateWithData((__bridge CFDataRef)([self responseData]), NULL);
+    CGImageRef cgImage = CGImageSourceCreateImageAtIndex(source, 0, (__bridge CFDictionaryRef)(@{(id)kCGImageSourceShouldCache:@(YES)}));
+    UIImage *decompressedImage = [UIImage imageWithCGImage:cgImage];
+    CFRelease(source);
+    CGImageRelease(cgImage);
+
     dispatch_async(dispatch_get_main_queue(), ^{
       imageDecompressionHandler(decompressedImage);
     });
@@ -1386,6 +1363,11 @@ totalBytesExpectedToWrite:(NSInteger)totalBytesExpectedToWrite {
 
 -(void) responseJSONWithCompletionHandler:(void (^)(id jsonObject)) jsonDecompressionHandler {
   
+  [self responseJSONWithOptions:0 completionHandler:jsonDecompressionHandler];
+}
+
+-(void) responseJSONWithOptions:(NSJSONReadingOptions) options completionHandler:(void (^)(id jsonObject)) jsonDecompressionHandler {
+  
   if([self responseData] == nil) {
     
     jsonDecompressionHandler(nil);
@@ -1395,7 +1377,7 @@ totalBytesExpectedToWrite:(NSInteger)totalBytesExpectedToWrite {
   dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_HIGH, 0), ^{
     
     NSError *error = nil;
-    id returnValue = [NSJSONSerialization JSONObjectWithData:[self responseData] options:0 error:&error];
+    id returnValue = [NSJSONSerialization JSONObjectWithData:[self responseData] options:options error:&error];
     if(error) {
       
       DLog(@"JSON Parsing Error: %@", error);
@@ -1409,6 +1391,7 @@ totalBytesExpectedToWrite:(NSInteger)totalBytesExpectedToWrite {
     });
   });
 }
+
 #pragma mark -
 #pragma mark Overridable methods
 
