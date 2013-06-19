@@ -91,7 +91,8 @@ OSStatus extractIdentityAndTrust(CFDataRef inPKCS12Data,
 
 - (id)initWithURLString:(NSString *)aURLString
                  params:(NSDictionary *)body
-             httpMethod:(NSString *)method;
+             httpMethod:(NSString *)method
+                timeout:(NSUInteger)timeout;
 
 -(NSData*) bodyData;
 
@@ -537,6 +538,7 @@ OSStatus extractIdentityAndTrust(CFDataRef inPKCS12Data,
 - (id)initWithURLString:(NSString *)aURLString
                  params:(NSDictionary *)params
              httpMethod:(NSString *)method
+                timeout:(NSUInteger)timeout
 
 {
   if((self = [super init])) {
@@ -584,7 +586,7 @@ OSStatus extractIdentityAndTrust(CFDataRef inPKCS12Data,
     
     self.request = [NSMutableURLRequest requestWithURL:finalURL
                                            cachePolicy:NSURLRequestReloadIgnoringLocalCacheData
-                                       timeoutInterval:kMKNetworkKitRequestTimeOutInSeconds];
+                                       timeoutInterval:timeout];
     
     [self.request setHTTPMethod:method];
     

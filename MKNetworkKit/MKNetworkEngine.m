@@ -371,10 +371,28 @@ static NSOperationQueue *_sharedNetworkQueue;
                                        params:(NSDictionary*) body
                                    httpMethod:(NSString*)method {
   
-  MKNetworkOperation *operation = [[self.customOperationSubclass alloc] initWithURLString:urlString params:body httpMethod:method];
+  MKNetworkOperation *operation = [self operationWithURLString:urlString
+                                                        params:body
+                                                    httpMethod:method
+                                                       timeout:kMKNetworkKitRequestTimeOutInSeconds];
   
   [self prepareHeaders:operation];
   return operation;
+}
+
+-(MKNetworkOperation*) operationWithURLString:(NSString*) urlString
+                                       params:(NSDictionary*) body
+                                   httpMethod:(NSString*)method
+                                      timeout:(NSUInteger)timeout
+{
+    
+    MKNetworkOperation *operation = [[self.customOperationSubclass alloc] initWithURLString:urlString
+                                                                                     params:body
+                                                                                 httpMethod:method
+                                                                                    timeout:timeout];
+    
+    [self prepareHeaders:operation];
+    return operation;
 }
 
 -(void) prepareHeaders:(MKNetworkOperation*) operation {
