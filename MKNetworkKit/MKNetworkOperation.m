@@ -1122,7 +1122,7 @@ OSStatus extractIdentityAndTrust(CFDataRef inPKCS12Data,        // 5
   for(NSOutputStream *stream in self.downloadStreams)
     [stream open];
   
-  NSDictionary *httpHeaders = [self.response allHeaderFields];
+  self.responseHeaders = [self.response allHeaderFields];
   
   // if you attach a stream to the operation, MKNetworkKit will not cache the response.
   // Streams are usually "big data chunks" that doesn't need caching anyways.
@@ -1131,11 +1131,11 @@ OSStatus extractIdentityAndTrust(CFDataRef inPKCS12Data,        // 5
     
     // We have all this complicated cache handling since NSURLRequestReloadRevalidatingCacheData is not implemented
     // do cache processing only if the request is a "GET" method
-    NSString *lastModified = httpHeaders[@"Last-Modified"];
-    NSString *eTag = httpHeaders[@"ETag"];
-    NSString *expiresOn = httpHeaders[@"Expires"];
+    NSString *lastModified = self.responseHeaders[@"Last-Modified"];
+    NSString *eTag = self.responseHeaders[@"ETag"];
+    NSString *expiresOn = self.responseHeaders[@"Expires"];
     
-    NSString *contentType = httpHeaders[@"Content-Type"];
+    NSString *contentType = self.responseHeaders[@"Content-Type"];
     // if contentType is image,
     
     NSDate *expiresOnDate = nil;
@@ -1149,7 +1149,7 @@ OSStatus extractIdentityAndTrust(CFDataRef inPKCS12Data,        // 5
         expiresOnDate = [[NSDate date] dateByAddingTimeInterval:kMKNetworkKitDefaultImageHeadRequestDuration];
     }
     
-    NSString *cacheControl = httpHeaders[@"Cache-Control"]; // max-age, must-revalidate, no-cache
+    NSString *cacheControl = self.responseHeaders[@"Cache-Control"]; // max-age, must-revalidate, no-cache
     NSArray *cacheControlEntities = [cacheControl componentsSeparatedByString:@","];
     
     for(NSString *substring in cacheControlEntities) {

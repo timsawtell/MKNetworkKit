@@ -309,6 +309,14 @@ typedef enum {
 @property (copy, nonatomic) void (^operationStateChangedHandler)(MKNetworkOperationState newState);
 
 /*!
+ *  @abstract Dictionary of the response headers (for any http type of operation)
+ *  @property responseHeaders
+ *
+ *  @discussion
+ */
+@property (nonatomic, strong) NSDictionary *responseHeaders;
+
+/*!
  *  @abstract controls persistence of authentication credentials
  *  @property credentialPersistence
  *  
