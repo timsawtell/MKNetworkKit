@@ -375,8 +375,6 @@ static NSOperationQueue *_sharedNetworkQueue;
                                                         params:body
                                                     httpMethod:method
                                                        timeout:kMKNetworkKitRequestTimeOutInSeconds];
-  
-  [self prepareHeaders:operation];
   return operation;
 }
 
